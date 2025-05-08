@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天翼云文件浏览器</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            text-align: center;
+            color: #0066cc;
+        }
+        .file-explorer {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .captcha-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999; /* 增加z-index值确保弹窗位于最顶层 */
+        }
+        .captcha-modal.hidden {
+            display: none;
+        }
+        .captcha-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 100%;
+        }
+        .captcha-content h3 {
+            margin-top: 0;
+        }
+        .captcha-image {
+            display: block;
+            margin: 15px auto;
+            max-width: 100%;
+            height: auto;
+        }
+        .captcha-input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .captcha-buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .captcha-buttons button {
+            flex: 1;
+            padding: 10px;
+        }
+        button {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0055aa;
+        }
+        .success {
+            background-color: #e6f7e6;
+            border: 1px solid #c3e6c3;
+        }
+        .error {
+            background-color: #fce4e4;
+            border: 1px solid #fcc2c2;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+        }
+        .file-list {
+            list-style: none;
+            padding: 0;
+        }
+        .file-item, .folder-item {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+        }
+        .file-item {
+            cursor: pointer;
+        }
+        .file-item:hover {
+            background-color: #f0f0f0;
+        }
+        .file-icon, .folder-icon {
+            margin-right: 10px;
+            width: 24px;
+            height: 24px;
+        }
+        .folder-icon {
+            color: #f8d775;
+        }
+        .file-icon {
+            color: #78a2cc;
+        }
+        .folder-item {
+            cursor: pointer;
+        }
+        .folder-item:hover {
+            background-color: #f0f0f0;
+        }
+        .download-status {
+            margin-top: 5px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .download-status.success {
+            display: block;
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .download-status.error {
+            display: block;
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .download-status.loading {
+            display: block;
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .download-link {
+            display: block;
+            margin-top: 10px;
+            color: #0066cc;
+            text-decoration: underline;
+        }
+        .breadcrumb {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 8px 0;
+            margin-bottom: 15px;
+            list-style: none;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .breadcrumb-item {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .breadcrumb-item:hover {
+            text-decoration: underline;
+        }
+        .breadcrumb-item + .breadcrumb-item::before {
+            content: "/";
+            padding: 0 5px;
+            color: #6c757d;
+        }
+        .hidden {
+            display: none;
+        }
+        .button-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .button-row button {
+            flex: 1;
+        }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .status-bar .login-status {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .status-bar button {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
+        }
+        .loading::after {
+            content: "...";
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        .debug-link {
+            text-align: center;
+            font-size: 12px;
+            margin-top: 20px;
+            opacity: 0.7;
+        }
+        .debug-link a {
+            color: #666;
+            text-decoration: none;
+        }
+        .debug-link a:hover {
+            text-decoration: underline;
+        }
+        @keyframes dots {
+            0%, 20% { content: ""; }
+            40% { content: "."; }
+            60% { content: ".."; }
+            80%, 100% { content: "..."; }
+        }
+    </style>
+</head>
+<body>
+    <h1>天翼云文件浏览器</h1>
+    
+    <!-- 验证码弹窗 -->
+    <div id="captchaModal" class="captcha-modal hidden">
+        <div class="captcha-content">
+            <h3>请输入验证码</h3>
+            <div id="captchaStatus" style="text-align: center; color: #666; margin-bottom: 10px;">验证码图片加载中...</div>
+            <img id="captchaImage" class="captcha-image" src="" alt="验证码图片" onerror="this.style.display='none';document.getElementById('captchaStatus').innerText='验证码图片加载失败';document.getElementById('captchaStatus').style.color='red';" onload="this.style.display='block';document.getElementById('captchaStatus').style.display='none';">
+            <input id="captchaInput" class="captcha-input" type="text" placeholder="请输入图片中的验证码" maxlength="5">
+            <div class="captcha-buttons">
+                <button id="submitCaptchaBtn">提交</button>
+                <button id="cancelCaptchaBtn">取消</button>
+            </div>
+            <div style="margin-top: 10px; text-align: center;">
+                <button id="refreshCaptchaBtn" style="font-size: 12px; padding: 5px;">刷新验证码</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="fileExplorer" class="file-explorer">
+        <div class="breadcrumb" id="breadcrumb">
+            <div class="breadcrumb-item" data-id="-11">根目录</div>
+        </div>
+        <div class="button-row">
+            <button id="getFilesBtn">刷新文件列表</button>
+            <button id="backToParentBtn" disabled>返回上一级</button>
+        </div>
+        <div id="downloadStatus" class="download-status"></div>
+        <div id="fileList" class="file-list">
+            <div class="loading">正在加载文件列表</div>
+        </div>
+    </div>
+    
+    <div class="debug-link">
+        <a href="/debug.html">管理面板</a>
+    </div>
+
+    <script>
+        // 全局变量
+        let userCookies = null;
+        let userId = "default_user";  // 使用默认用户ID
+        let folderHistory = [];  // 初始为空，等服务器返回默认ID后再设置
+        let currentFolderId = '';  // 初始为空，服务器会返回默认值
+        let captchaData = null;  // 存储验证码相关数据
+        let allSessions = [];    // 保存所有会话信息
+        let defaultFolderId = ''; // 环境变量中设置的默认文件夹ID
+        let rootFolderId = '-11'; // 根目录ID
+        let isDefaultFolder = true; // 当前是否在默认文件夹中
+        
+        // 页面加载时自动加载文件列表
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log(`页面加载，准备初始化...`);
+            // 首先获取配置信息，然后初始化
+            getConfig();
+            
+            // 验证码相关事件
+            document.getElementById('submitCaptchaBtn').addEventListener('click', submitCaptcha);
+            document.getElementById('cancelCaptchaBtn').addEventListener('click', hideCaptchaModal);
+            document.getElementById('refreshCaptchaBtn').addEventListener('click', refreshCaptcha);
+            
+            // 文件浏览相关事件
+            document.getElementById('getFilesBtn').addEventListener('click', function() {
+                console.log(`手动刷新文件列表，当前文件夹ID: ${currentFolderId}`);
+                // 如果当前文件夹ID为空，或者强制刷新到默认目录
+                if (!currentFolderId || !isAllowedFolder(currentFolderId)) {
+                    refreshToDefaultFolder();
+                } else {
+                    getFileList(currentFolderId);
+                }
+            });
+            document.getElementById('backToParentBtn').addEventListener('click', function() {
+                if (folderHistory.length > 1) {
+                    // 移除当前文件夹
+                    folderHistory.pop();
+                    // 获取上一级文件夹
+                    const parentFolder = folderHistory[folderHistory.length - 1];
+                    console.log(`返回上一级文件夹，ID: ${parentFolder.id}`);
+                    getFileList(parentFolder.id);
+                }
+            });
+        });
+        
+        // 获取配置信息
+        async function getConfig() {
+            try {
+                console.log(`获取服务器配置信息...`);
+                const response = await fetch('/api/config');
+                const configData = await response.json();
+                
+                if (configData.status === 'success') {
+                    defaultFolderId = configData.data.defaultFolderId;
+                    rootFolderId = configData.data.rootFolderId;
+                    console.log(`获取到配置信息：默认文件夹=${defaultFolderId}, 根目录=${rootFolderId}`);
+                    
+                    // 初始化页面
+                    initDefaultFolder();
+                } else {
+                    console.error('获取配置失败:', configData);
+                    // 使用硬编码值继续
+                    initDefaultFolder();
+                }
+            } catch (error) {
+                console.error('获取配置出错:', error);
+                // 使用硬编码值继续
+                initDefaultFolder();
+            }
+        }
+        
+        // 检查是否允许访问的文件夹
+        function isAllowedFolder(folderId) {
+            // 如果是默认文件夹或者默认文件夹的子文件夹(在历史记录中)
+            if (folderId === defaultFolderId || folderHistory.some(f => f.id === defaultFolderId)) {
+                return true;
+            }
+            // 如果默认文件夹是根目录，则允许访问所有文件夹
+            if (defaultFolderId === rootFolderId) {
+                return true;
+            }
+            // 其他情况不允许访问
+            return false;
+        }
+        
+        // 强制刷新到默认文件夹
+        function refreshToDefaultFolder() {
+            console.log(`强制刷新到默认文件夹: ${defaultFolderId}`);
+            currentFolderId = defaultFolderId;
+            folderHistory = [{id: defaultFolderId, name: '根目录'}];
+            isDefaultFolder = true;
+            getFileList(defaultFolderId);
+        }
+        
+        // 显示验证码弹窗
+        function showCaptchaModal(captchaImageBase64, data) {
+            captchaData = data;
+            if (!captchaImageBase64) {
+                alert('验证码图片数据为空！');
+                return;
+            }
+            document.getElementById('captchaImage').src = 'data:image/png;base64,' + captchaImageBase64;
+            document.getElementById('captchaInput').value = '';
+            document.getElementById('captchaModal').classList.remove('hidden');
+        }
+        
+        // 隐藏验证码弹窗
+        function hideCaptchaModal() {
+            document.getElementById('captchaModal').classList.add('hidden');
+        }
+        
+        // 初始化默认文件夹
+        async function initDefaultFolder() {
+            try {
+                console.log(`正在初始化默认文件夹，ID: ${defaultFolderId}...`);
+                
+                // 直接使用配置中的默认文件夹ID
+                if (defaultFolderId) {
+                    currentFolderId = defaultFolderId;
+                    folderHistory = [{id: defaultFolderId, name: '根目录'}];
+                    isDefaultFolder = true;
+                    
+                    // 获取文件列表
+                    getFileList(defaultFolderId);
+                    return;
+                }
+                
+                // 如果没有获取到配置，使用API获取默认文件夹
+                const response = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('服务器默认文件夹响应:', data);
+                
+                if (data.status === 'success') {
+                    // 服务器返回的默认文件夹ID
+                    const serverId = data.data.folderId;
+                    console.log(`服务器返回的默认文件夹ID: ${serverId}`);
+                    
+                    // 设置当前文件夹ID
+                    currentFolderId = serverId;
+                    defaultFolderId = serverId; // 同时设置为默认文件夹
+                    
+                    // 初始化文件夹历史
+                    folderHistory = [{id: serverId, name: '根目录'}];
+                    isDefaultFolder = true;
+                    
+                    // 现在使用正常的文件列表获取逻辑
+                    console.log(`使用获取到的默认ID刷新文件列表: ${currentFolderId}`);
+                    getFileList(currentFolderId);
+                } else if (data.status === 'need_captcha') {
+                    // 需要验证码
+                    if (data.data && data.data.captcha_image) {
+                        showCaptchaModal(data.data.captcha_image, data.data);
+                    }
+                } else {
+                    // 失败，尝试强制登录
+                    await performLogin(true);
+                }
+            } catch (error) {
+                console.error('初始化默认文件夹失败，尝试强制登录', error);
+                await performLogin(true);
+            }
+        }
+        
+        // 执行登录操作
+        async function performLogin(forceNewLogin = false) {
+            try {
+                // 如果需要强制新登录，使用不同的API
+                const url = forceNewLogin ? '/api/login' : '/api/auto-login';
+                const method = forceNewLogin ? 'POST' : 'GET';
+                const body = forceNewLogin ? JSON.stringify({
+                    username: '',  // 使用默认账号
+                    password: '',
+                    remember: true
+                }) : null;
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: forceNewLogin ? {
+                        'Content-Type': 'application/json'
+                    } : {},
+                    body: body
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // 保存cookies和userId
+                    userCookies = data.data.cookies;
+                    userId = data.data.userId || 'default_user';
+                    
+                    // 重新初始化默认文件夹
+                    initDefaultFolder();
+                } else if (data.status === 'need_captcha') {
+                    // 需要验证码
+                    
+                    // 显示验证码弹窗
+                    if (data.data && data.data.captcha_image) {
+                        showCaptchaModal(data.data.captcha_image, data.data);
+                    } else {
+                        console.error('验证码数据不完整');
+                        alert('获取验证码失败: 验证码图片数据不完整');
+                        document.getElementById('fileList').innerHTML = `<div style="padding: 20px; text-align: center; color: red;">获取验证码失败：验证码图片数据不完整</div>`;
+                    }
+                } else {
+                    document.getElementById('fileList').innerHTML = `<div style="padding: 20px; text-align: center; color: red;">登录失败：${data.message || '未知错误'}</div>`;
+                }
+            } catch (error) {
+                console.error('登录请求出错');
+                document.getElementById('fileList').innerHTML = `<div style="padding: 20px; text-align: center; color: red;">登录请求出错: ${error.message}</div>`;
+            }
+        }
+
+        // 提交验证码
+        async function submitCaptcha() {
+            const validateCode = document.getElementById('captchaInput').value.trim();
+            
+            if (!validateCode) {
+                alert('请输入验证码');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/captcha/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        validateCode: validateCode,
+                        captchaToken: captchaData.captcha_token,
+                        lt: captchaData.lt,
+                        reqId: captchaData.req_id,
+                        appId: captchaData.app_id,
+                        remember: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // 登录成功，隐藏验证码弹窗
+                    hideCaptchaModal();
+                    
+                    // 保存cookies和userId
+                    userCookies = data.data.cookies;
+                    userId = data.data.userId;
+                    
+                    // 重新初始化默认文件夹，与通常的刷新逻辑保持一致
+                    initDefaultFolder();
+                } else if (data.status === 'need_captcha') {
+                    // 验证码错误，显示新的验证码
+                    alert('验证码错误，请重新输入');
+                    if (data.data && data.data.captcha_image) {
+                        showCaptchaModal(data.data.captcha_image, data.data);
+                    }
+                } else {
+                    alert('登录失败: ' + data.message);
+                }
+            } catch (error) {
+                alert('验证码提交失败: ' + error.message);
+            }
+        }
+        
+        // 刷新验证码
+        async function refreshCaptcha() {
+            document.getElementById('captchaStatus').style.display = 'block';
+            document.getElementById('captchaStatus').innerText = '正在刷新验证码...';
+            document.getElementById('captchaImage').style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'need_captcha' && data.data && data.data.captcha_image) {
+                    // 更新验证码图片
+                    captchaData = data.data;
+                    document.getElementById('captchaImage').src = 'data:image/png;base64,' + data.data.captcha_image;
+                    document.getElementById('captchaInput').value = '';
+                } else {
+                    document.getElementById('captchaStatus').innerText = '刷新验证码失败: ' + (data.message || '未知错误');
+                    document.getElementById('captchaStatus').style.color = 'red';
+                }
+            } catch (error) {
+                console.error('刷新验证码失败');
+                document.getElementById('captchaStatus').innerText = '刷新验证码失败: ' + error.message;
+                document.getElementById('captchaStatus').style.color = 'red';
+            }
+        }
+        
+        // 处理文件列表数据
+        function handleFileListData(data) {
+            const fileList = document.getElementById('fileList');
+                    
+            // 更新面包屑导航
+            updateBreadcrumb();
+
+            // 清空文件列表
+            fileList.innerHTML = '';
+            
+            // 添加文件夹
+            data.data.folders.forEach(folder => {
+                const folderItem = document.createElement('div');
+                folderItem.className = 'folder-item';
+                folderItem.innerHTML = `
+                    <span class="folder-icon">📁</span>
+                    <span>${folder.name}</span>
+                `;
+                folderItem.addEventListener('click', function() {
+                    // 添加到历史记录
+                    if (!folderHistory.find(f => f.id === folder.id)) {
+                        folderHistory.push({id: folder.id, name: folder.name});
+                    }
+                    getFileList(folder.id);
+                });
+                fileList.appendChild(folderItem);
+            });
+            
+            // 添加文件
+            data.data.files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.dataset.id = file.id;
+                fileItem.innerHTML = `
+                    <span class="file-icon">📄</span>
+                    <span>${file.name}</span>
+                `;
+                fileItem.addEventListener('click', function() {
+                    downloadFile(file.id, file.name);
+                });
+                fileList.appendChild(fileItem);
+            });
+
+            // 如果没有文件和文件夹
+            if (data.data.folders.length === 0 && data.data.files.length === 0) {
+                fileList.innerHTML = '<div style="padding: 20px; text-align: center;">此文件夹为空</div>';
+            }
+        }
+
+        // 获取文件列表
+        async function getFileList(folderId) {
+            // 首先检查是否允许访问该文件夹
+            if (!isAllowedFolder(folderId)) {
+                console.warn(`不允许访问文件夹 ${folderId}，强制使用默认文件夹 ${defaultFolderId}`);
+                refreshToDefaultFolder();
+                return;
+            }
+            
+            console.log(`正在获取文件夹ID: ${folderId} 的内容`);
+            
+            const fileList = document.getElementById('fileList');
+            const backToParentBtn = document.getElementById('backToParentBtn');
+            
+            // 禁用或启用返回按钮 - 在默认文件夹中禁用返回按钮
+            backToParentBtn.disabled = folderHistory.length <= 1 || folderId === defaultFolderId;
+            
+            // 显示加载中
+            fileList.innerHTML = '<div class="loading">正在加载文件列表</div>';
+            
+            try {
+                const requestBody = {
+                    folderId: folderId,
+                    userId: userId
+                };
+                
+                console.log(`发送请求参数: `, requestBody);
+                
+                const response = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                console.log(`API响应:`, data);
+                
+                if (data.status === 'success') {
+                    // 更新当前文件夹ID
+                    currentFolderId = folderId;
+                    console.log(`当前文件夹ID已更新为: ${currentFolderId}`);
+                    
+                    // 如果当前文件夹是默认文件夹，标记状态
+                    isDefaultFolder = (currentFolderId === defaultFolderId);
+                    
+                    // 处理文件列表数据
+                    handleFileListData(data);
+                } else if (data.status === 'need_refresh') {
+                    // 自动更新cookies并重新获取文件列表
+                    fileList.innerHTML = '<div style="padding: 20px; text-align: center; color: orange;">登录已自动刷新，正在重新获取文件列表...</div>';
+                    
+                    // 更新cookies
+                    userCookies = data.data.cookies;
+                    
+                    // 延迟一下再刷新，避免请求过于频繁
+                    setTimeout(() => {
+                        getFileList(folderId);
+                    }, 1000);
+                } else if (data.status === 'need_captcha') {
+                    // 需要验证码
+                    fileList.innerHTML = '<div style="padding: 20px; text-align: center; color: orange;">需要输入验证码</div>';
+                    
+                    // 显示验证码弹窗
+                    if (data.data && data.data.captcha_image) {
+                        showCaptchaModal(data.data.captcha_image, data.data);
+                    }
+                } else {
+                    // 如果获取失败，尝试重新登录并刷新到默认文件夹
+                    fileList.innerHTML = `<div style="padding: 20px; text-align: center; color: red;">获取文件列表失败：${data.message || '未知错误'}</div>`;
+                    
+                    // 添加刷新到默认文件夹的按钮
+                    const refreshBtn = document.createElement('button');
+                    refreshBtn.textContent = '刷新到默认文件夹';
+                    refreshBtn.style.marginTop = '10px';
+                    refreshBtn.onclick = refreshToDefaultFolder;
+                    fileList.appendChild(refreshBtn);
+                    
+                    // 尝试重新登录
+                    setTimeout(performLogin, 1000);
+                }
+            } catch (error) {
+                fileList.innerHTML = `<div style="padding: 20px; text-align: center; color: red;">获取文件列表失败：${error.message}</div>`;
+                
+                // 添加刷新到默认文件夹的按钮
+                const refreshBtn = document.createElement('button');
+                refreshBtn.textContent = '刷新到默认文件夹';
+                refreshBtn.style.marginTop = '10px';
+                refreshBtn.onclick = refreshToDefaultFolder;
+                fileList.appendChild(refreshBtn);
+            }
+        }
+
+        function updateBreadcrumb() {
+            const breadcrumb = document.getElementById('breadcrumb');
+            breadcrumb.innerHTML = '';
+            
+            folderHistory.forEach((folder, index) => {
+                const item = document.createElement('div');
+                item.className = 'breadcrumb-item';
+                item.textContent = folder.name;
+                item.dataset.id = folder.id;
+                
+                item.addEventListener('click', function() {
+                    // 点击时截断历史到此位置
+                    folderHistory = folderHistory.slice(0, index + 1);
+                    getFileList(folder.id);
+                });
+                
+                breadcrumb.appendChild(item);
+            });
+        }
+
+        // 下载文件函数
+        async function downloadFile(fileId, fileName) {
+            const downloadStatus = document.getElementById('downloadStatus');
+            downloadStatus.className = 'download-status loading';
+            downloadStatus.innerHTML = `正在获取文件 "${fileName}" 的下载链接...`;
+            
+            try {
+                const response = await fetch(`/api/download?fileId=${fileId}&userId=${userId}`);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.data && data.data.url) {
+                    // 成功获取下载链接
+                    downloadStatus.className = 'download-status success';
+                    downloadStatus.innerHTML = `
+                        <div>已获取文件 "${data.data.fileName}" 的下载链接</div>
+                        <a href="${data.data.url}" class="download-link" target="_blank" download="${data.data.fileName}">点击下载文件</a>
+                        <div style="margin-top: 5px; font-size: 12px;">(或者右键点击链接，选择"另存为")</div>
+                    `;
+                    
+                    // 自动打开下载链接
+                    window.open(data.data.url, '_blank');
+                } else {
+                    // 获取下载链接失败
+                    downloadStatus.className = 'download-status error';
+                    downloadStatus.innerHTML = `获取下载链接失败: ${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                console.error('下载文件出错');
+                downloadStatus.className = 'download-status error';
+                downloadStatus.innerHTML = `下载文件出错: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

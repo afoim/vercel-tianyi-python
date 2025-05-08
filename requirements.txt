@@ -1,0 +1,4 @@
+requests==2.31.0
+pycryptodome==3.19.0
+psycopg2-binary==2.9.9
+supabase==2.15.1 
