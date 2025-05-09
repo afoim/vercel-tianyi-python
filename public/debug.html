@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天翼云调试工具</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        button {
+            margin-bottom: 5px;
+            margin-right: 5px;
+        }
+        .result-box {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 5px;
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        pre {
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>天翼云调试工具</h1>
+    
+    <div class="section">
+        <h3>强制登录测试</h3>
+        <button id="forceLoginBtn">强制重新登录</button>
+        <button id="getCaptchaBtn">获取验证码</button>
+        <div id="loginResult" class="result-box"></div>
+        
+        <div id="saveCookieConfirm" class="hidden">
+            <p>登录成功！是否将本次登录的Cookie保存到数据库？</p>
+            <button id="saveCookieBtn">保存Cookie</button>
+            <button id="skipSaveCookieBtn">不保存</button>
+        </div>
+        
+        <div id="captchaContainer" class="hidden">
+            <h4>验证码测试</h4>
+            <div id="captchaStatus">验证码图片加载中...</div>
+            <img id="captchaImage" style="display:none;" src="" alt="验证码图片">
+            <input id="captchaInput" type="text" placeholder="请输入验证码" maxlength="5">
+            <button id="submitCaptchaBtn">提交</button>
+            <button id="refreshCaptchaBtn">刷新</button>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>环境变量测试</h3>
+        <button id="checkEnvBtn">检查环境变量配置</button>
+        <div id="envResult" class="result-box"></div>
+    </div>
+    
+    <a href="/">返回文件浏览器</a>
+
+    <script>
+        // 全局变量
+        let captchaData = null;
+        let lastLoginData = null; // 保存最近一次登录成功的数据
+        
+        // 工具函数：显示结果区域
+        function showElement(id) {
+            document.getElementById(id).style.display = 'block';
+        }
+        
+        // 页面加载时绑定事件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 登录测试
+            document.getElementById('forceLoginBtn').addEventListener('click', forceLogin);
+            document.getElementById('getCaptchaBtn').addEventListener('click', getCaptcha);
+            document.getElementById('submitCaptchaBtn').addEventListener('click', submitCaptcha);
+            document.getElementById('refreshCaptchaBtn').addEventListener('click', refreshCaptcha);
+            
+            // 保存Cookie按钮
+            document.getElementById('saveCookieBtn').addEventListener('click', saveCookieToDatabase);
+            document.getElementById('skipSaveCookieBtn').addEventListener('click', hideSaveCookieConfirm);
+            
+            // 环境变量
+            document.getElementById('checkEnvBtn').addEventListener('click', checkEnv);
+        });
+        
+        // 强制登录
+        async function forceLogin() {
+            const resultBox = document.getElementById('loginResult');
+            resultBox.innerHTML = '正在请求强制登录...';
+            showElement('loginResult');
+            
+            // 隐藏保存Cookie确认框
+            document.getElementById('saveCookieConfirm').classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        force: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // 格式化显示结果
+                resultBox.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                // 如果需要验证码，显示验证码输入界面
+                if (data.status === 'need_captcha' && data.data && data.data.captcha_image) {
+                    showCaptchaUI(data.data.captcha_image, data.data);
+                } else if (data.status === 'success') {
+                    // 登录成功，保存数据并显示保存Cookie的确认框
+                    lastLoginData = data;
+                    document.getElementById('saveCookieConfirm').classList.remove('hidden');
+                }
+            } catch (error) {
+                resultBox.innerHTML = `<p>请求失败: ${error.message}</p>`;
+            }
+        }
+        
+        // 获取验证码
+        async function getCaptcha() {
+            const resultBox = document.getElementById('loginResult');
+            resultBox.innerHTML = '正在请求验证码...';
+            showElement('loginResult');
+            
+            try {
+                const response = await fetch('/api/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                // 格式化显示结果
+                resultBox.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                // 如果成功获取验证码，显示验证码输入界面
+                if (data.status === 'need_captcha' && data.data && data.data.captcha_image) {
+                    showCaptchaUI(data.data.captcha_image, data.data);
+                }
+            } catch (error) {
+                resultBox.innerHTML = `<p>请求失败: ${error.message}</p>`;
+            }
+        }
+        
+        // 显示验证码UI
+        function showCaptchaUI(captchaImageBase64, data) {
+            captchaData = data;
+            
+            const captchaContainer = document.getElementById('captchaContainer');
+            const captchaImage = document.getElementById('captchaImage');
+            const captchaStatus = document.getElementById('captchaStatus');
+            
+            // 显示验证码容器
+            captchaContainer.classList.remove('hidden');
+            
+            // 设置验证码图片
+            if (captchaImageBase64) {
+                captchaImage.src = 'data:image/png;base64,' + captchaImageBase64;
+                captchaImage.style.display = 'block';
+                captchaStatus.style.display = 'none';
+            } else {
+                captchaImage.style.display = 'none';
+                captchaStatus.style.display = 'block';
+                captchaStatus.innerText = '验证码图片加载失败';
+            }
+            
+            // 清空输入框
+            document.getElementById('captchaInput').value = '';
+        }
+        
+        // 提交验证码
+        async function submitCaptcha() {
+            const validateCode = document.getElementById('captchaInput').value.trim();
+            const resultBox = document.getElementById('loginResult');
+            
+            if (!validateCode) {
+                alert('请输入验证码');
+                return;
+            }
+            
+            resultBox.innerHTML = '正在提交验证码...';
+            
+            try {
+                const response = await fetch('/api/captcha/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        validateCode: validateCode,
+                        captchaToken: captchaData.captcha_token,
+                        lt: captchaData.lt,
+                        reqId: captchaData.req_id,
+                        appId: captchaData.app_id,
+                        remember: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // 格式化显示结果
+                resultBox.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                // 如果验证码错误，显示新的验证码
+                if (data.status === 'need_captcha' && data.data && data.data.captcha_image) {
+                    showCaptchaUI(data.data.captcha_image, data.data);
+                } else if (data.status === 'success') {
+                    // 登录成功，隐藏验证码UI
+                    document.getElementById('captchaContainer').classList.add('hidden');
+                    // 保存数据并显示保存Cookie的确认框
+                    lastLoginData = data;
+                    document.getElementById('saveCookieConfirm').classList.remove('hidden');
+                }
+            } catch (error) {
+                resultBox.innerHTML = `<p>提交验证码失败: ${error.message}</p>`;
+            }
+        }
+        
+        // 刷新验证码
+        async function refreshCaptcha() {
+            const captchaStatus = document.getElementById('captchaStatus');
+            const captchaImage = document.getElementById('captchaImage');
+            
+            captchaStatus.style.display = 'block';
+            captchaStatus.innerText = '正在刷新验证码...';
+            captchaImage.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'need_captcha' && data.data && data.data.captcha_image) {
+                    // 更新验证码数据
+                    captchaData = data.data;
+                    
+                    // 更新验证码图片
+                    captchaImage.src = 'data:image/png;base64,' + data.data.captcha_image;
+                    captchaImage.style.display = 'block';
+                    captchaStatus.style.display = 'none';
+                    
+                    // 清空输入框
+                    document.getElementById('captchaInput').value = '';
+                } else {
+                    captchaStatus.innerText = '刷新验证码失败: ' + (data.message || '未知错误');
+                }
+            } catch (error) {
+                captchaStatus.innerText = '刷新验证码失败: ' + error.message;
+            }
+        }
+        
+        // 检查环境变量配置
+        async function checkEnv() {
+            const resultBox = document.getElementById('envResult');
+            resultBox.innerHTML = '正在检查环境变量配置...';
+            showElement('envResult');
+            
+            try {
+                const response = await fetch('/api/check-env');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const envInfo = data.data;
+                    let htmlContent = '<div>';
+                    
+                    // 天翼云账号
+                    htmlContent += `<div>
+                        <strong>天翼云账号:</strong> 
+                        ${envInfo.TIANYI_USERNAME.status}
+                    </div>`;
+                    
+                    // 天翼云密码
+                    htmlContent += `<div>
+                        <strong>天翼云密码:</strong> 
+                        ${envInfo.TIANYI_PASSWORD.status}
+                    </div>`;
+                    
+                    // 默认文件夹ID
+                    htmlContent += `<div>
+                        <strong>默认文件夹ID:</strong> 
+                        ${envInfo.DEFAULT_FOLDER_ID.is_set ? envInfo.DEFAULT_FOLDER_ID.value : '未配置'}
+                    </div>`;
+                    
+                    // 环境
+                    htmlContent += `<div>
+                        <strong>当前环境:</strong> ${envInfo.environment}
+                    </div>`;
+                    
+                    htmlContent += '</div>';
+                    
+                    resultBox.innerHTML = htmlContent;
+                } else {
+                    resultBox.innerHTML = `<p>获取环境变量配置失败: ${data.message || '未知错误'}</p>`;
+                }
+            } catch (error) {
+                resultBox.innerHTML = `<p>检查环境变量失败: ${error.message}</p>`;
+            }
+        }
+        
+        // 保存Cookie到数据库
+        async function saveCookieToDatabase() {
+            if (!lastLoginData || !lastLoginData.data || !lastLoginData.data.cookies) {
+                alert('没有可保存的登录数据');
+                return;
+            }
+            
+            const resultBox = document.getElementById('loginResult');
+            resultBox.innerHTML += '<p style="color: red;">Cookie保存功能已被禁用</p>';
+            
+            // 隐藏保存Cookie确认框
+            hideSaveCookieConfirm();
+        }
+        
+        // 隐藏保存Cookie确认框
+        function hideSaveCookieConfirm() {
+            document.getElementById('saveCookieConfirm').classList.add('hidden');
+        }
+    </script>
+</body>
+</html> 

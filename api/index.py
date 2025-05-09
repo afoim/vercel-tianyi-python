@@ -11,6 +11,20 @@ import random
 import time
 import os
 from api.db_manager import SupabaseManager
+from dotenv import load_dotenv
+
+# 加载.env文件中的环境变量
+load_dotenv()
+
+
+# 添加调试信息 - 打印环境变量配置
+print("\n============= 天翼云服务环境变量配置 =============")
+print(f"TIANYI_USERNAME: {os.environ.get('TIANYI_USERNAME', '未设置')}")
+# 屏蔽密码敏感信息，只显示长度
+password = os.environ.get("TIANYI_PASSWORD", "")
+print(f"TIANYI_PASSWORD: {'*' * len(password)} (长度: {len(password)})")
+print(f"DEFAULT_FOLDER_ID: {os.environ.get('DEFAULT_FOLDER_ID', '未设置')}")
+print("==================================================\n")
 
 # 从环境变量获取天翼云账号，避免在代码中硬编码
 # 若需配置，请设置环境变量TIANYI_USERNAME和TIANYI_PASSWORD
@@ -135,17 +149,11 @@ class handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "error", "message": f"获取下载链接失败: {str(e)}"}).encode('utf-8'))
         elif self.path.startswith('/api/sessions'):
-            # 获取所有会话列表
-            sessions = self.db_manager.list_sessions()
-            # 敏感信息处理，去除密码字段
-            for session in sessions:
-                if 'password' in session:
-                    session['password'] = '******' if session['password'] else ''
-            
-            self.send_response(200)
+            # 该API已移除，返回404错误
+            self.send_response(404)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "success", "data": sessions}).encode('utf-8'))
+            self.wfile.write(json.dumps({"status": "error", "message": "该接口已被禁用"}).encode('utf-8'))
         elif self.path == '/api/auto-login':
             # 自动登录接口，使用默认账号
             login_result = self.cloud189_login(TIANYI_USERNAME, TIANYI_PASSWORD)
@@ -177,6 +185,42 @@ class handler(BaseHTTPRequestHandler):
                     "rootFolderId": "-11"  # 根目录ID
                 }
             }).encode('utf-8'))
+        elif self.path == '/api/check-env':
+            # 返回环境变量信息（不返回任何敏感信息内容，只返回状态）
+            username_set = os.environ.get("TIANYI_USERNAME", "") != ""
+            password_set = os.environ.get("TIANYI_PASSWORD", "") != ""
+            folder_id = os.environ.get("DEFAULT_FOLDER_ID", "")
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "success",
+                "data": {
+                    "TIANYI_USERNAME": {
+                        "is_set": username_set,
+                        "status": "已配置" if username_set else "未配置"
+                    },
+                    "TIANYI_PASSWORD": {
+                        "is_set": password_set,
+                        "status": "已配置" if password_set else "未配置"
+                    },
+                    "DEFAULT_FOLDER_ID": {
+                        "value": folder_id,
+                        "is_set": folder_id != ""
+                    },
+                    "environment": os.environ.get("VERCEL_ENV", "development")
+                }
+            }).encode('utf-8'))
+        elif self.path == '/api/clear-cache':
+            # 该API已移除，返回404错误
+            self.send_response(404)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "error",
+                "message": "该接口已被禁用"
+            }).encode('utf-8'))
         else:
             self.send_response(200)
             self.send_header('Content-type','text/plain')
@@ -191,9 +235,9 @@ class handler(BaseHTTPRequestHandler):
         
         # 处理登录请求
         if self.path == '/api/login':
-            # 使用请求中的用户名和密码，如果没有提供则使用默认账号
-            username = request_body.get('username', TIANYI_USERNAME)
-            password = request_body.get('password', TIANYI_PASSWORD)
+            # 强制使用环境变量中的默认账号密码
+            username = TIANYI_USERNAME
+            password = TIANYI_PASSWORD
             validate_code = request_body.get('validateCode', '')
             remember = request_body.get('remember', True)
             
@@ -207,11 +251,8 @@ class handler(BaseHTTPRequestHandler):
             
             # 如果登录成功且需要记住登录信息，保存到数据库
             if login_result.get('status') == 'success' and remember and 'data' in login_result and 'cookies' in login_result['data']:
-                # 如果使用的是默认账号，用默认用户ID，否则使用用户名的MD5值
-                if username == TIANYI_USERNAME and password == TIANYI_PASSWORD:
-                    user_id = DEFAULT_USER_ID
-                else:
-                    user_id = self.generate_user_id(username)
+                # 使用默认用户ID
+                user_id = DEFAULT_USER_ID
                 
                 saved = self.db_manager.save_session(
                     user_id=user_id,
@@ -352,24 +393,18 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(login_result).encode('utf-8'))
         # 删除会话
         elif self.path == '/api/sessions/delete':
-            user_id = request_body.get('userId', '')
-            
-            if not user_id:
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "需要userId参数"}).encode('utf-8'))
-                return
-            
-            deleted = self.db_manager.delete_session(user_id)
-            
-            self.send_response(200)
+            # 该API已移除，返回404错误
+            self.send_response(404)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({
-                "status": "success" if deleted else "error",
-                "message": "会话已删除" if deleted else "删除会话失败"
-            }).encode('utf-8'))
+            self.wfile.write(json.dumps({"status": "error", "message": "该接口已被禁用"}).encode('utf-8'))
+        # 保存Cookie到数据库
+        elif self.path == '/api/sessions/save':
+            # 该API已移除，返回404错误
+            self.send_response(404)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "error", "message": "该接口已被禁用"}).encode('utf-8'))
         else:
             self.send_response(404)
             self.send_header('Content-type', 'application/json')
@@ -500,6 +535,19 @@ class handler(BaseHTTPRequestHandler):
         # 敏感账号信息 - 用于日志显示
         masked_username = self._mask_sensitive_info(username)
         
+        # 添加调试信息 - 显示登录信息
+        print(f"\n============= 登录请求信息 =============")
+        print(f"用户名: {masked_username}")
+        print(f"密码长度: {len(password)}")
+        print(f"是否为空: 用户名={username == ''}, 密码={password == ''}")
+        print(f"验证码: {'已提供' if validateCode else '未提供'}")
+        print("========================================\n")
+        
+        # 判断用户名密码是否为空
+        if not username or not password:
+            print("错误: 用户名或密码为空")
+            return {"status": "error", "message": "用户名或密码为空"}
+        
         # 访问登录URL获取重定向
         url = "https://cloud.189.cn/api/portal/loginUrl.action?redirectURL=https%3A%2F%2Fcloud.189.cn%2Fmain.action"
         res = session.get(url)
@@ -522,7 +570,11 @@ class handler(BaseHTTPRequestHandler):
         req_id = urllib.parse.parse_qs(urllib.parse.urlparse(redirect_url).query).get('reqId', [''])[0]
         app_id = urllib.parse.parse_qs(urllib.parse.urlparse(redirect_url).query).get('appId', [''])[0]
         
+        # 添加调试信息 - 显示登录参数
+        print(f"登录参数: lt={lt}, reqId={req_id}, appId={app_id}")
+        
         if not lt or not app_id:
+            print("错误: 获取登录参数失败")
             return {"status": "error", "message": "获取登录参数失败"}
         
         headers = {

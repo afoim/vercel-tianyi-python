@@ -243,6 +243,25 @@ class PostgresManager:
             print(f"获取会话列表失败: {str(e)}")
             return []
     
+    def delete_all_sessions(self):
+        """删除所有会话信息"""
+        if not self.is_connected or not self.connection:
+            print("数据库未连接，无法删除所有会话")
+            return False
+        
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("DELETE FROM tianyi_sessions")
+            self.connection.commit()
+            cursor.close()
+            return True
+            
+        except Exception as e:
+            print(f"删除所有会话失败: {str(e)}")
+            if self.connection:
+                self.connection.rollback()
+            return False
+    
     def __del__(self):
         """析构函数，关闭数据库连接"""
         if self.connection:

@@ -10,6 +10,7 @@
 - 会话持久化存储（使用PostgreSQL数据库）
 - 简洁直观的Web界面
 - 支持通过环境变量配置账号密码
+- 支持验证码识别和会话管理
 
 ## 环境变量配置
 
@@ -21,9 +22,9 @@ TIANYI_USERNAME=你的天翼云账号
 TIANYI_PASSWORD=你的天翼云密码
 
 # 数据库配置（已有默认值，可选修改）
-DB_USER=postgres.aounyouknclwcjjnseqz
-DB_PASSWORD=WnDry41tMptHopMi
-DB_HOST=aws-0-us-east-2.pooler.supabase.com
+DB_USER=postgres.XXXXXXXXXXXXXXXXXX
+DB_PASSWORD=XXXXXXXXXXXXXXXXXXX
+DB_HOST=XXXXXXXXXXXXX
 DB_PORT=6543
 DB_NAME=postgres
 
@@ -32,6 +33,8 @@ DEFAULT_FOLDER_ID=-11
 ```
 
 将环境变量部署到Vercel，或在本地开发时自动加载。
+
+> 本项目原理为使用数据库内的长Cookie请求天翼云获取文件列表以及下载链接。因为本人环境太干净没法做带验证码登录的情况，如果遇到验证码问题请自行实现，或者本地抓包获取长Cookie手动写入数据库
 
 ### 自定义默认文件夹
 
@@ -109,6 +112,78 @@ DEFAULT_FOLDER_ID=-11
 }
 ```
 
+### 验证码和登录接口
+
+**URL**: `/api/login`
+**方法**: `POST`
+**请求体**:
+
+```json
+{
+  "force": true  // 强制重新登录
+}
+```
+
+**URL**: `/api/refresh`
+**方法**: `POST`
+**用途**: 获取验证码图片
+
+**URL**: `/api/captcha/login`
+**方法**: `POST`
+**请求体**:
+
+```json
+{
+  "validateCode": "验证码内容",
+  "captchaToken": "验证码token",
+  "lt": "lt值",
+  "reqId": "请求ID",
+  "appId": "应用ID"
+}
+```
+
+### 会话管理接口
+
+**URL**: `/api/sessions`
+**方法**: `GET`
+**用途**: 获取所有保存的会话
+
+**URL**: `/api/sessions/save`
+**方法**: `POST`
+**请求体**:
+
+```json
+{
+  "userId": "用户ID",
+  "cookies": {} // cookies对象
+}
+```
+
+**URL**: `/api/sessions/delete`
+**方法**: `POST`
+**请求体**:
+
+```json
+{
+  "userId": "要删除的用户ID"
+}
+```
+
+## 调试页面
+
+系统提供了一个调试页面用于测试天翼云验证码功能和会话管理：
+
+**URL**: `/debug.html`
+
+调试页面功能：
+- 强制登录测试：触发完整登录流程，包括验证码处理
+- 获取验证码：专门用于获取验证码图片进行测试
+- 提交验证码：测试验证码的识别和提交
+- 会话管理：查看、保存和删除会话信息
+- 环境变量测试：检查系统环境变量配置状态
+
+**注意**：调试页面仅供开发测试使用，在生产环境中应当限制访问。
+
 ## 本地开发
 
 1. 安装依赖：
@@ -144,4 +219,22 @@ DEFAULT_FOLDER_ID=-11
 - 点击文件夹：进入对应文件夹
 - 点击"返回上一级"：返回上级文件夹
 - 点击"刷新文件列表"：重新获取当前文件夹内容
-- 点击"刷新登录"：强制重新登录
+- 点击文件名：下载对应文件
+
+### 验证码处理
+
+当登录需要验证码时，系统会自动弹出验证码输入框。输入正确的验证码后，系统将自动完成登录流程并刷新文件列表。
+
+### 安全说明
+
+- 该项目不会在前端显示敏感信息，如账号密码
+- 登录凭证（Cookies）会保存在数据库中以便后续使用
+- 在生产环境中，建议限制对调试页面（`/debug.html`）的访问
+
+## 数据库设计
+
+系统使用PostgreSQL数据库存储会话信息。主要表结构：
+
+- `tianyi_sessions`: 存储用户会话信息，包括cookies、用户ID等
+
+详细的数据库设置请参考 `db_setup.md` 和 `create_table.sql` 文件。
